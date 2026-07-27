@@ -1,27 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { IoClose, IoMenu } from "react-icons/io5";
-import { FiMoon, FiSun, FiLogOut, FiDollarSign, FiPlus, FiUser } from "react-icons/fi";
+import { FiMoon, FiSun, FiLogOut, FiDollarSign, FiPlus, FiUser, FiKey, FiCheck, FiX, FiTrash2 } from "react-icons/fi";
 import { SiVercel } from "react-icons/si";
 import config from "@/lib/config";
+import toast from "react-hot-toast";
 
 export default function Navbar() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [savingKey, setSavingKey] = useState(false);
 
   const appName = config?.appName || "AI SaaS";
   const logoLetter = appName.trim().charAt(0).toUpperCase();
 
-  // Eagerly prefetch workspace/gallery routes for fast tabs
+  const isApiKeyActive = Boolean(session?.user?.customApiKey);
+
   useEffect(() => {
-    // Prefetch common routes
-  }, []);
+    if (session?.user?.customApiKey) {
+      setApiKeyInput(session.user.customApiKey);
+    }
+  }, [session?.user?.customApiKey]);
 
   const appMatch = pathname ? pathname.match(/^\/app\/([^\/]+)/) : null;
   const currentAppId = appMatch ? appMatch[1] : null;
@@ -38,11 +45,71 @@ export default function Navbar() {
         { name: "Pricing", path: "/pricing" },
       ];
 
+  const handleSaveApiKey = async (e) => {
+    e.preventDefault();
+    const key = apiKeyInput.trim();
+    if (!key) {
+      toast.error("Please enter a valid API Key");
+      return;
+    }
+    setSavingKey(true);
+    try {
+      if (status === "authenticated") {
+        const res = await fetch("/api/user/apikey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: key }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to save API key");
+
+        await updateSession({ customApiKey: key });
+        toast.success("Custom API Key updated!");
+        setIsApiKeyModalOpen(false);
+        window.location.reload();
+      } else {
+        const res = await signIn("credentials", {
+          apiKey: key,
+          redirect: false,
+        });
+        if (res?.error) {
+          throw new Error(res.error || "Failed to sign in with API key");
+        }
+        toast.success("Signed in with API Key!");
+        setIsApiKeyModalOpen(false);
+        window.location.reload();
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to save API Key");
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const handleRemoveApiKey = async () => {
+    setSavingKey(true);
+    try {
+      const res = await fetch("/api/user/apikey", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove API key");
+
+      await updateSession({ customApiKey: null });
+      setApiKeyInput("");
+      toast.success("Custom API Key removed");
+      setIsApiKeyModalOpen(false);
+      window.location.reload();
+    } catch (err) {
+      toast.error(err.message || "Failed to remove API Key");
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full glass-panel border-b border-divider/50 shadow-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         
-        {/* Logo and Brand Title (Visible at all times) */}
+        {/* Logo and Brand Title */}
         <Link href="/" className="flex items-center gap-2 transition-transform hover:scale-[1.02] active:scale-95">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white font-extrabold text-lg shadow-md shadow-primary/30">
             {logoLetter}
@@ -74,7 +141,7 @@ export default function Navbar() {
         </nav>
 
         {/* Desktop Actions Section */}
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-3">
           
           {/* Vercel Deploy Button */}
           <a
@@ -87,20 +154,35 @@ export default function Navbar() {
             <span>Deploy</span>
           </a>
 
+          {/* Add/Manage API Key - Directly visible in Navbar */}
+          <button
+            onClick={() => setIsApiKeyModalOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+              isApiKeyActive
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                : "bg-bg-page/50 border-divider text-secondary-text hover:text-white hover:border-primary/40"
+            }`}
+          >
+            <FiKey className={isApiKeyActive ? "text-amber-400" : "text-secondary-text"} />
+            <span>{isApiKeyActive ? "Custom API Key" : "Add API Key"}</span>
+          </button>
+
           {status === "authenticated" ? (
             <div className="flex items-center">
               {/* Credit Balance indicator */}
               <div className="flex items-center h-9 border border-divider rounded-l bg-bg-page/30 overflow-hidden pr-2">
                 <span className="font-bold text-[13px] px-3 flex items-center text-primary-text gap-1">
                   <FiDollarSign className="text-emerald-500 text-xs" />
-                  {session.user.credits !== undefined ? session.user.credits : 0}
+                  {isApiKeyActive ? "∞ (API Key)" : session.user.credits !== undefined ? session.user.credits : 0}
                 </span>
-                <Link
-                  href="/pricing"
-                  className="flex items-center justify-center w-5 h-5 rounded hover:bg-bg-card text-secondary-text transition-colors"
-                >
-                  <FiPlus size={14} />
-                </Link>
+                {!isApiKeyActive && (
+                  <Link
+                    href="/pricing"
+                    className="flex items-center justify-center w-5 h-5 rounded hover:bg-bg-card text-secondary-text transition-colors"
+                  >
+                    <FiPlus size={14} />
+                  </Link>
+                )}
               </div>
 
               {/* Profile Menu Toggle */}
@@ -123,13 +205,20 @@ export default function Navbar() {
 
                 {/* Profile Dropdown */}
                 {isProfileOpen && (
-                  <div className="absolute right-0 top-11 w-48 rounded border border-divider bg-bg-card p-1 shadow-lg z-[100] animate-scale-up">
+                  <div className="absolute right-0 top-11 w-52 rounded border border-divider bg-bg-card p-1 shadow-lg z-[100] animate-scale-up">
                     <div className="px-3 py-2 text-xs text-secondary-text border-b border-divider/50 mb-1 truncate">
                       {session.user.email}
                     </div>
                     <button
+                      onClick={() => setIsApiKeyModalOpen(true)}
+                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-xs font-semibold text-primary-text hover:bg-primary/10 transition-colors"
+                    >
+                      <FiKey size={14} className="text-amber-400" />
+                      <span>{isApiKeyActive ? "Manage API Key" : "Add API Key"}</span>
+                    </button>
+                    <button
                       onClick={() => signOut({ callbackUrl: "/login" })}
-                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
+                      className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-xs font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
                     >
                       <FiLogOut size={14} />
                       <span>Sign Out</span>
@@ -148,12 +237,12 @@ export default function Navbar() {
           )}
         </div>
 
-        {/* Mobile Navbar Hamburger Menu Controls */}
+        {/* Mobile Navbar Controls */}
         <div className="flex md:hidden items-center gap-2">
           {status === "authenticated" && (
             <div className="flex items-center h-8 border border-divider rounded bg-bg-page/30 px-2.5 text-xs font-bold text-primary-text gap-0.5">
               <FiDollarSign className="text-emerald-500 text-[10px]" />
-              {session.user.credits !== undefined ? session.user.credits : 0}
+              {isApiKeyActive ? "∞ Key" : session.user.credits !== undefined ? session.user.credits : 0}
             </div>
           )}
           
@@ -167,7 +256,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Absolutely Positioned Mobile Menu Dropdown (Backdrop blur + matches layout) */}
+      {/* Mobile Menu Dropdown */}
       {isOpen && (
         <div className="absolute top-full left-0 right-0 z-[200] glass-dropdown border-b border-divider shadow-2xl py-4 px-6 md:hidden animate-fade-in">
           <nav className="flex flex-col gap-3">
@@ -184,6 +273,19 @@ export default function Navbar() {
                 {link.name}
               </Link>
             ))}
+
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                setIsApiKeyModalOpen(true);
+              }}
+              className="flex w-full items-center justify-between rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs font-bold text-amber-400"
+            >
+              <div className="flex items-center gap-2">
+                <FiKey />
+                <span>{isApiKeyActive ? "Manage Custom API Key" : "Add API Key"}</span>
+              </div>
+            </button>
 
             <div className="h-px bg-divider/50 my-2" />
 
@@ -219,6 +321,77 @@ export default function Navbar() {
               </Link>
             )}
           </nav>
+        </div>
+      )}
+
+      {/* API Key Modal */}
+      {isApiKeyModalOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-bg-card border border-divider w-full max-w-md rounded-xl p-6 space-y-5 shadow-2xl animate-scale-up">
+            <div className="flex items-center justify-between border-b border-divider/60 pb-3">
+              <div className="flex items-center gap-2 text-amber-400 font-black text-sm uppercase">
+                <FiKey className="text-base" />
+                <span>Custom API Key Settings</span>
+              </div>
+              <button
+                onClick={() => setIsApiKeyModalOpen(false)}
+                className="text-secondary-text hover:text-white transition-colors cursor-pointer"
+              >
+                <FiX size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-secondary-text leading-relaxed">
+              Use your own <strong>MuAPI Key</strong> to generate UGC videos directly without consuming or purchasing website credits.
+            </p>
+
+            <form onSubmit={handleSaveApiKey} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] uppercase font-bold text-secondary-text tracking-wider">
+                  MuAPI Secret Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder="mu_..."
+                  className="w-full bg-bg-page border border-divider rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-secondary-text/50 focus:outline-none focus:border-amber-400 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3 pt-2">
+                {isApiKeyActive && status === "authenticated" && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveApiKey}
+                    disabled={savingKey}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold border border-red-500/20 transition-all cursor-pointer"
+                  >
+                    <FiTrash2 />
+                    <span>Remove Key</span>
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsApiKeyModalOpen(false)}
+                    className="px-4 py-2 rounded-lg bg-bg-page border border-divider text-xs font-semibold text-secondary-text hover:text-white cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingKey || !apiKeyInput.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-amber-500/20"
+                  >
+                    <FiCheck />
+                    <span>{savingKey ? "Processing..." : status === "authenticated" ? "Save Key" : "Sign In with API Key"}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </header>

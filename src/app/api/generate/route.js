@@ -18,9 +18,14 @@ export async function POST(req) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { modelId, prompt, settings, images } = await req.json();
+    const body = await req.json();
+    const { modelId, prompt, settings, images } = body;
 
-    const apiKey = process.env.UGC_API_KEY;
+    const headerApiKey = req.headers.get("x-custom-api-key");
+    const customApiKey = headerApiKey || body.customApiKey || session.user.customApiKey || null;
+    const isUsingCustomKey = Boolean(customApiKey && customApiKey.trim().length > 0);
+
+    const apiKey = isUsingCustomKey ? customApiKey.trim() : process.env.UGC_API_KEY;
     if (!apiKey) {
       return new NextResponse("API Key not configured", { status: 500 });
     }
@@ -51,14 +56,20 @@ export async function POST(req) {
       requiredCredits = duration * 50;
     }
 
-    // Check credits
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { credits: true }
-    });
+    if (isUsingCustomKey) {
+      requiredCredits = 0;
+    }
 
-    if (!user || user.credits < requiredCredits) {
-      return NextResponse.json({ error: `Insufficient credits. This requires ${requiredCredits} credits but you only have ${user?.credits || 0}.` }, { status: 403 });
+    // Check credits if not using custom key
+    if (!isUsingCustomKey) {
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { credits: true }
+      });
+
+      if (!user || user.credits < requiredCredits) {
+        return NextResponse.json({ error: `Insufficient credits. This requires ${requiredCredits} credits but you only have ${user?.credits || 0}.` }, { status: 403 });
+      }
     }
 
     // Prepare payload based on MUAPI specs
@@ -105,11 +116,13 @@ export async function POST(req) {
       }
     });
 
-    // Deduct required credits
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { credits: { decrement: requiredCredits } }
-    });
+    // Deduct required credits if not using custom key
+    if (!isUsingCustomKey && requiredCredits > 0) {
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { credits: { decrement: requiredCredits } }
+      });
+    }
 
     return NextResponse.json({ 
       success: true, 
