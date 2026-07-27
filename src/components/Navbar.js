@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { IoClose, IoMenu } from "react-icons/io5";
@@ -54,18 +54,31 @@ export default function Navbar() {
     }
     setSavingKey(true);
     try {
-      const res = await fetch("/api/user/apikey", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: key }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save API key");
+      if (status === "authenticated") {
+        const res = await fetch("/api/user/apikey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: key }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to save API key");
 
-      await updateSession({ customApiKey: key });
-      toast.success("Custom API Key updated!");
-      setIsApiKeyModalOpen(false);
-      window.location.reload();
+        await updateSession({ customApiKey: key });
+        toast.success("Custom API Key updated!");
+        setIsApiKeyModalOpen(false);
+        window.location.reload();
+      } else {
+        const res = await signIn("credentials", {
+          apiKey: key,
+          redirect: false,
+        });
+        if (res?.error) {
+          throw new Error(res.error || "Failed to sign in with API key");
+        }
+        toast.success("Signed in with API Key!");
+        setIsApiKeyModalOpen(false);
+        window.location.reload();
+      }
     } catch (err) {
       toast.error(err.message || "Failed to save API Key");
     } finally {
@@ -141,19 +154,18 @@ export default function Navbar() {
             <span>Deploy</span>
           </a>
 
-          {status === "authenticated" && (
-            <button
-              onClick={() => setIsApiKeyModalOpen(true)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
-                isApiKeyActive
-                  ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
-                  : "bg-bg-page/50 border-divider text-secondary-text hover:text-white hover:border-primary/40"
-              }`}
-            >
-              <FiKey className={isApiKeyActive ? "text-amber-400" : "text-secondary-text"} />
-              <span>{isApiKeyActive ? "Custom API Key" : "Add API Key"}</span>
-            </button>
-          )}
+          {/* Add/Manage API Key - Directly visible in Navbar */}
+          <button
+            onClick={() => setIsApiKeyModalOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+              isApiKeyActive
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                : "bg-bg-page/50 border-divider text-secondary-text hover:text-white hover:border-primary/40"
+            }`}
+          >
+            <FiKey className={isApiKeyActive ? "text-amber-400" : "text-secondary-text"} />
+            <span>{isApiKeyActive ? "Custom API Key" : "Add API Key"}</span>
+          </button>
 
           {status === "authenticated" ? (
             <div className="flex items-center">
@@ -262,20 +274,18 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {status === "authenticated" && (
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setIsApiKeyModalOpen(true);
-                }}
-                className="flex w-full items-center justify-between rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs font-bold text-amber-400"
-              >
-                <div className="flex items-center gap-2">
-                  <FiKey />
-                  <span>{isApiKeyActive ? "Manage Custom API Key" : "Add API Key"}</span>
-                </div>
-              </button>
-            )}
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                setIsApiKeyModalOpen(true);
+              }}
+              className="flex w-full items-center justify-between rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs font-bold text-amber-400"
+            >
+              <div className="flex items-center gap-2">
+                <FiKey />
+                <span>{isApiKeyActive ? "Manage Custom API Key" : "Add API Key"}</span>
+              </div>
+            </button>
 
             <div className="h-px bg-divider/50 my-2" />
 
@@ -350,7 +360,7 @@ export default function Navbar() {
               </div>
 
               <div className="flex items-center justify-between gap-3 pt-2">
-                {isApiKeyActive && (
+                {isApiKeyActive && status === "authenticated" && (
                   <button
                     type="button"
                     onClick={handleRemoveApiKey}
@@ -376,7 +386,7 @@ export default function Navbar() {
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-amber-500/20"
                   >
                     <FiCheck />
-                    <span>{savingKey ? "Saving..." : "Save Key"}</span>
+                    <span>{savingKey ? "Processing..." : status === "authenticated" ? "Save Key" : "Sign In with API Key"}</span>
                   </button>
                 </div>
               </div>
