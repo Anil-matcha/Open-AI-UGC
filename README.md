@@ -19,6 +19,8 @@
 
 > **Schedule your UGC content automatically with AI** -> https://github.com/Anil-matcha/Free-AI-Social-Media-Scheduler
 
+> **Learn to monetize AI-generated content like this** -> https://github.com/Anil-matcha/ai-creator-academy
+
 <p align="center">
   <a href="https://github.com/Anil-matcha/awesome-generative-ai-apps">
     <img src="https://img.shields.io/badge/Part%20of-Awesome%20Generative%20AI%20Apps-FFD700?style=for-the-badge&logo=github&logoColor=black" alt="Awesome Generative AI Apps">
