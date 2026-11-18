@@ -46,6 +46,14 @@ model User {
   creations     Creation[]
 }
 
+// One row per Stripe Checkout session whose credits were granted (webhook idempotency).
+model CreditGrant {
+  stripeSessionId String   @id
+  userId          String
+  credits         Int
+  createdAt       DateTime @default(now())
+}
+
 model Creation {
   id           String   @id @default(cuid())
   type         String?  // video or image

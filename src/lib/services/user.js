@@ -21,6 +21,27 @@ export const UserService = {
     });
   },
 
+  // Grants credits once per Stripe Checkout session. A redelivered
+  // checkout.session.completed hits the primary key and is ignored.
+  async grantCreditsOnce(sessionId, userId, amount) {
+    if (amount <= 0) return false;
+    try {
+      await prisma.$transaction([
+        prisma.creditGrant.create({
+          data: { stripeSessionId: sessionId, userId, credits: amount },
+        }),
+        prisma.user.update({
+          where: { id: userId },
+          data: { credits: { increment: amount } },
+        }),
+      ]);
+      return true;
+    } catch (error) {
+      if (error?.code === "P2002") return false;
+      throw error;
+    }
+  },
+
   async deductCredits(userId, amount) {
     if (amount <= 0) return;
     
@@ -42,6 +63,7 @@ export const UserService = {
 };
 
 export const getCredits = UserService.getCredits.bind(UserService);
+export const grantCreditsOnce = UserService.grantCreditsOnce.bind(UserService);
 export const addCredits = UserService.addCredits.bind(UserService);
 export const deductCredits = UserService.deductCredits.bind(UserService);
 export default UserService;
