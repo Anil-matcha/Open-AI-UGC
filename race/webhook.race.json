@@ -1,0 +1,21 @@
+{
+  "rule": "A redelivered checkout.session.completed grants the purchased credits once",
+  "setup": "INSERT INTO users VALUES ('u1',10)",
+  "invariant": "SELECT credits <= 110 FROM users WHERE id='u1'",
+  "isolation": [
+    "read committed"
+  ],
+  "notes": "SQL transliteration of the webhook handler; covers bounded SQL orders only, not HTTP or Stripe.",
+  "requests": [
+    {
+      "statements": [
+        "WITH g AS (INSERT INTO credit_grants(stripe_session_id) VALUES ('cs_1') ON CONFLICT DO NOTHING RETURNING 1) UPDATE users SET credits=credits+100 WHERE id='u1' AND EXISTS (SELECT 1 FROM g)"
+      ]
+    },
+    {
+      "statements": [
+        "WITH g AS (INSERT INTO credit_grants(stripe_session_id) VALUES ('cs_1') ON CONFLICT DO NOTHING RETURNING 1) UPDATE users SET credits=credits+100 WHERE id='u1' AND EXISTS (SELECT 1 FROM g)"
+      ]
+    }
+  ]
+}

@@ -39,8 +39,8 @@ export const BillingService = {
       const credits = parseInt(session.metadata.credits || "0", 10);
 
       if (userId && credits > 0) {
-        await UserService.addCredits(userId, credits);
-        return { success: true, userId, credits };
+        const granted = await UserService.grantCreditsOnce(session.id, userId, credits);
+        return { success: true, userId, credits, duplicate: !granted };
       }
     }
     return { success: false };

@@ -274,3 +274,7 @@ Built with [Muapi.ai](https://muapi.ai?utm_source=github&utm_medium=readme&utm_c
 ---
 
 *Looking for a free, open-source alternative to Arcads or MakeUGC? Open AI UGC is a self-hostable AI UGC video ad studio you can customize, rebrand, and resell. No content filters, no vendor lock-in, no per-seat pricing.*
+
+## Webhook concurrency test
+
+Stripe can deliver a webhook event twice or out of order. `npm run test:race` runs the Stripe webhook's database writes in every possible order on a real Postgres with [VibeRaven](https://viberaven.dev) (`npx -y viberaven race`) and fails if any order breaks the rule in `race/webhook.race.json` (a redelivered `checkout.session.completed` grants credits once). It also runs in `npm test`. Add a rule there when you add a webhook handler.
